@@ -4,6 +4,10 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Circle Fit (offline)</title>
+<link rel="icon" type="image/png" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b0b0c">
 <style>
   /* Apple Calculator–inspired palette */
   :root{
@@ -329,6 +333,14 @@ lblMM.addEventListener('click', ()=> setMode(MM));
 
 /* boot */
 setPrimaryDecimalsDefault(); updateUnitLabels(); render([],null); renderLog();
+</script>
+</script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./service-worker.js").catch(()=>{});
+    });
+  }
 </script>
 </body>
 </html>

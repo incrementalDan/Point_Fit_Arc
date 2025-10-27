@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Circle Fit (offline)</title>
+<style>
+  /* Apple Calculator–inspired palette */
+  :root{
+    --bg:#1c1c1e; --panel:#2c2c2e; --line:#3a3a3c;
+    --text:#f2f2f7; --muted:#a1a1aa;
+    --btn:#3a3a3c; --btnText:#f2f2f7; --btnBorder:#4a4a4c;
+    --accent:#ff9500; --accentText:#fff7ec;
+    --danger:#ff453a;
+    --iOS-blue:#0a84ff;              /* MM active */
+    --iOS-red:#ff3b30;               /* IN active */
+  }
+  *{box-sizing:border-box;font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial}
+  body{margin:0;background:var(--bg);color:var(--text)}
+  .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  h1{font-size:20px;margin:0}
+
+  /* === Unit Slider (IN | knob | MM) === */
+  .unit-bar{display:flex;align-items:center;gap:10px}
+  .unit-label{
+    min-width:32px;text-align:center;cursor:pointer;user-select:none;
+    color:var(--muted); transform:scale(.96); transition:all .15s ease;
+    font-weight:600; letter-spacing:.4px;
+  }
+  .unit-label.active{ color:var(--text); transform:scale(1.08) translateY(-1px); text-shadow:0 0 10px rgba(255,255,255,.1)}
+  .unit-label.in.active{ color:#ffd1cd }    /* warm tint when IN active */
+  .unit-label.mm.active{ color:#d6e8ff }    /* cool tint when MM active */
+
+  .switch{
+    position:relative; width:74px; height:36px; border-radius:999px;
+    border:1px solid #55565a; background:#2a2a2c; cursor:pointer;
+    box-shadow:inset 0 2px 6px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25);
+    transition:background .2s ease, border-color .2s ease;
+  }
+  .switch.in{ background:linear-gradient(180deg, rgba(255,59,48,.35), rgba(0,0,0,0)), #3a1f1f; border-color:#733c35 }
+  .switch.mm{ background:linear-gradient(180deg, rgba(10,132,255,.35), rgba(0,0,0,0)), #1c2a48; border-color:#2a4f88 }
+  .knob{
+    position:absolute; top:50%; left:6px; width:28px; height:28px; border-radius:50%;
+    background:#e9e9ee; transform:translate(0,-50%); transition:left .2s ease;
+    box-shadow:0 1px 2px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.7);
+  }
+  .switch.mm .knob{ left:40px; }  /* slide right */
+
+  .layout{display:grid;grid-template-columns:1.2fr 1fr 1.1fr;gap:16px}
+  @media (max-width:1100px){.layout{grid-template-columns:1fr}}
+  .card{background:var(--panel);border-radius:14px;padding:16px;box-shadow:0 10px 24px rgba(0,0,0,.35)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .small{font-size:12px;color:var(--muted)}
+  textarea{width:100%;height:200px;resize:vertical;padding:10px;border-radius:10px;border:1px solid var(--line);background:#1f1f21;color:var(--text)}
+  input[type="number"]{width:110px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:#1f1f21;color:var(--text)}
+  button{background:var(--btn);border:1px solid var(--btnBorder);color:var(--btnText);border-radius:12px;padding:10px 14px;cursor:pointer}
+  button:hover{filter:brightness(1.05)}
+  .primary{background:var(--accent);border-color:#e07f00;color:var(--accentText);font-weight:800;letter-spacing:.2px;box-shadow:0 6px 18px rgba(255,149,0,.25)}
+  .ghost{background:#222225}
+  .danger{background:#2a1b1b;border-color:#5a2c2c;color:#ffd4d1}
+
+  /* Radius hero */
+  .radius-hero{display:grid;place-items:center;text-align:center;border-radius:14px;padding:20px 12px;margin-bottom:12px;background:linear-gradient(180deg, rgba(255,149,0,.18), rgba(0,0,0,0)) , #1f1f21;border:1px solid #6a4b1f}
+  .radius-hero .label{font-size:12px;color:#ffd8a6;text-transform:uppercase;letter-spacing:.3px}
+  .radius-hero .value{font-variant-numeric:tabular-nums;font-size:44px;font-weight:900;line-height:1.05;color:var(--accent);text-shadow:0 0 18px rgba(255,149,0,.25)}
+  .radius-hero .unitline{margin-top:4px;color:#ffd8a6;font-size:12px}
+
+  .kpi{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .kpi .item{background:#1f1f21;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .kpi .label{font-size:12px;color:var(--muted)}
+  .kpi .value{font-variant-numeric:tabular-nums;font-size:18px;margin-top:2px}
+  .kpi .value small{color:var(--muted);margin-left:6px}
+
+  .rms{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+  .chip{padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:#1f1f21}
+  .chip.ok{border-color:#2d4d2f;background:#1c2a1c;color:#8af59d}
+  .chip.bad{border-color:#5a2c2c;background:#2a1b1b;color:#ff9b95}
+
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  th{color:var(--muted);font-weight:600}
+  td:first-child,th:first-child{text-align:center}
+  .hl{background:rgba(255,149,0,.12)}
+  .bad{color:var(--danger)}
+
+  /* Log */
+  .log{max-height:520px;overflow:auto;border-radius:10px;border:1px solid var(--line);background:#1f1f21}
+  .log .rowh,.log .rowd{display:grid;grid-template-columns:1.1fr .7fr 1.2fr 1.3fr .9fr;gap:6px;padding:8px;border-bottom:1px solid var(--line)}
+  .log .rowh{color:var(--muted)}
+  .log .rowd .r{color:#ffd199}
+  .log .rowd .rms.ok{color:#8af59d}
+  .log .rowd .rms.bad{color:var(--danger)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1>Circle Fit — N points (offline)</h1>
+
+    <!-- Unit slider -->
+    <div class="unit-bar" id="unitBar" role="group" aria-label="Units">
+      <div id="lblIN" class="unit-label in active">IN</div>
+      <div id="switch" class="switch in" role="button" aria-pressed="true" tabindex="0" title="Toggle units">
+        <div class="knob"></div>
+      </div>
+      <div id="lblMM" class="unit-label mm">MM</div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- Input -->
+    <div class="card">
+      <div class="small">Paste XY pairs (per line: <span class="mono">x y</span> or <span class="mono">x,y</span>). Interpreted as <span id="uIn">inches</span>.</div>
+      <textarea id="ta" placeholder="Example:
+0.1253, 0
+0.1521, 0.1245
+0.2542, 0.2842"></textarea>
+      <div class="row" style="margin-top:10px;justify-content:space-between">
+        <div class="row">
+          <button id="btnFit" class="primary">Fit Circle</button>
+          <button id="btnDrop">Drop Worst & Refit</button>
+          <button id="btnClear" class="ghost">Clear</button>
+        </div>
+        <div class="row small">
+          <label><input id="decimals" type="number" value="4" min="0" max="12"/> &nbsp;decimals (primary)</label>
+          <button id="btnCopy" class="ghost">Copy results</button>
+          <button id="btnDownload" class="ghost">Download CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="card">
+      <div class="radius-hero">
+        <div class="label">Radius</div>
+        <div id="r" class="value">—</div>
+        <div class="unitline" id="rSec">—</div>
+      </div>
+
+      <div class="kpi">
+        <div class="item"><div class="label">Center Xc</div><div class="value"><span id="xc">—</span><small id="xcSec"></small></div></div>
+        <div class="item"><div class="label">Center Yc</div><div class="value"><span id="yc">—</span><small id="ycSec"></small></div></div>
+        <div class="item"><div class="label">Diameter</div><div class="value"><span id="d">—</span><small id="dSec"></small></div></div>
+        <div class="item"><div class="label">Points (N)</div><div class="value" id="n">—</div></div>
+      </div>
+
+      <div class="rms">
+        <div class="small">RMS residual</div>
+        <div id="rms" class="chip">—</div>
+      </div>
+
+      <div class="row" style="margin-top:12px;justify-content:space-between">
+        <div class="small">Per-point residuals</div>
+      </div>
+      <div style="overflow:auto;margin-top:8px;max-height:220px">
+        <table id="tbl"><thead><tr><th>#</th><th>X</th><th>Y</th><th>Residual</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div class="small">Results Log (primary units)</div>
+        <div class="row">
+          <button id="btnLogCSV" class="ghost">Export Log CSV</button>
+          <button id="btnLogClear" class="danger">Clear Log</button>
+        </div>
+      </div>
+      <div class="log" id="log">
+        <div class="rowh"><div>Time</div><div>N</div><div>Radius</div><div>Center (Xc, Yc)</div><div>RMS</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:16px" class="small">Tip: collect 5–6 points spaced along the arc; if one residual is much larger, re-measure or press “Drop Worst & Refit”.</div>
+</div>
+
+<script>
+/* ===== Units & formatting ===== */
+const IN="in", MM="mm"; let mode=IN;
+const IN_PER_MM=1/25.4, MM_PER_IN=25.4;
+const primaryDecimals=()=> (mode===IN?4:3);
+const secondaryDecimals=()=> (mode===IN?3:4);
+const primaryLabel=()=> (mode===IN?"in":"mm");
+const secondaryLabel=()=> (mode===IN?"mm":"in");
+const rmsThresholdIn=0.001; const rmsThreshold=()=> (mode===IN?rmsThresholdIn:rmsThresholdIn*MM_PER_IN);
+
+function toInches(x){ return mode===IN?x:x*IN_PER_MM; }
+function fromInches(v,unit){ return unit===IN?v:v*MM_PER_IN; }
+
+/* ===== Math ===== */
+function fitCircle(points){
+  if(!points||points.length<3) throw new Error("Need at least 3 points.");
+  let A11=0,A12=0,A13=0,A22=0,A23=0,A33=0,b1=0,b2=0,b3=0;
+  for(const p of points){const x=p.x,y=p.y,s=-(x*x+y*y);A11+=x*x;A12+=x*y;A13+=x;A22+=y*y;A23+=y;A33+=1;b1+=x*s;b2+=y*s;b3+=s;}
+  const M=[[A11,A12,A13],[A12,A22,A23],[A13,A23,A33]], b=[b1,b2,b3];
+  const [D,E,F]=solve3x3(M,b);
+  const xc=-D/2, yc=-E/2; const r2=(D*D+E*E)/4 - F; if(!(r2>0)) throw new Error("Degenerate/collinear points.");
+  const r=Math.sqrt(r2);
+  let ss=0; const residuals=points.map(p=>{const d=Math.hypot(p.x-xc,p.y-yc)-r; ss+=d*d; return d;});
+  return {xc,yc,r,rms:Math.sqrt(ss/points.length),residuals};
+}
+function solve3x3(M,b){
+  const A=[M[0].slice(),M[1].slice(),M[2].slice()], x=b.slice();
+  for(let k=0;k<3;k++){let piv=k; for(let r=k+1;r<3;r++) if(Math.abs(A[r][k])>Math.abs(A[piv][k])) piv=r;
+    if(Math.abs(A[piv][k])<1e-18) throw new Error("Ill-conditioned.");
+    if(piv!==k){[A[k],A[piv]]=[A[piv],A[k]]; [x[k],x[piv]]=[x[piv],x[k]];}
+    const f=A[k][k]; for(let j=k;j<3;j++)A[k][j]/=f; x[k]/=f;
+    for(let i=0;i<3;i++) if(i!==k){const m=A[i][k]; for(let j=k;j<3;j++)A[i][j]-=m*A[k][j]; x[i]-=m*x[k];}
+  } return x;
+}
+
+/* ===== Parse / Render ===== */
+const ta=document.getElementById('ta'), tbl=document.getElementById('tbl').querySelector('tbody');
+const decEl=document.getElementById('decimals'), uInEl=document.getElementById('uIn');
+const fmt=(v,d)=>Number.isFinite(v)?v.toFixed(d):"—";
+function parseRaw(text){const pts=[]; for(let line of text.split(/\r?\n/)){line=line.trim(); if(!line) continue; const m=line.match(/^([+\-]?\d*\.?\d+(?:[eE][+\-]?\d+)?)\s*[,;\s]\s*([+\-]?\d*\.?\d+(?:[eE][+\-]?\d+)?)$/); if(m){const x=parseFloat(m[1]),y=parseFloat(m[2]); if(isFinite(x)&&isFinite(y)) pts.push({x,y});}} return pts;}
+function parseToInches(){return parseRaw(ta.value).map(p=>({x:toInches(p.x),y:toInches(p.y)}));}
+function setPrimaryDecimalsDefault(){decEl.value=primaryDecimals();}
+function updateUnitLabels(){uInEl.textContent=(mode===IN?"inches":"millimeters");}
+
+function render(pointsInInches, fit){
+  const pDec=+decEl.value||primaryDecimals(), sDec=secondaryDecimals();
+  const show=(inIn)=>({p: fmt(fromInches(inIn,mode),pDec)+" "+primaryLabel(), s:"("+fmt(fromInches(inIn,mode===IN?MM:IN),sDec)+" "+secondaryLabel()+")"});
+
+  // Radius
+  if(fit){ const s=show(fit.r); document.getElementById('r').textContent=s.p; document.getElementById('rSec').textContent=s.s; }
+  else{ document.getElementById('r').textContent="—"; document.getElementById('rSec').textContent="—"; }
+
+  const xc=fit?show(fit.xc):null, yc=fit?show(fit.yc):null, d=fit?show(2*fit.r):null;
+  document.getElementById('xc').textContent=xc?xc.p:"—"; document.getElementById('xcSec').textContent=xc?xc.s:"";
+  document.getElementById('yc').textContent=yc?yc.p:"—"; document.getElementById('ycSec').textContent=yc?yc.s:"";
+  document.getElementById('d').textContent=d?d.p:"—";   document.getElementById('dSec').textContent=d?d.s:"";
+  document.getElementById('n').textContent=pointsInInches?.length ?? "—";
+
+  const rmsEl=document.getElementById('rms');
+  if(!fit){rmsEl.textContent="—"; rmsEl.className="chip";}
+  else{ const rs=show(fit.rms); rmsEl.textContent=`${rs.p} ${rs.s}`; rmsEl.className="chip "+(fromInches(fit.rms,mode)>rmsThreshold()?"bad":"ok"); }
+
+  // Residuals
+  tbl.innerHTML=""; if(!fit) return;
+  let maxAbs=-1,maxIdx=-1; fit.residuals.forEach((v,i)=>{const a=Math.abs(v); if(a>maxAbs){maxAbs=a; maxIdx=i;}});
+  pointsInInches.forEach((p,i)=>{ const tr=document.createElement('tr'); if(i===maxIdx&&pointsInInches.length>3) tr.classList.add('hl');
+    const rShow=show(fit.residuals[i]);
+    tr.innerHTML=`<td>${i+1}</td>
+      <td>${fmt(fromInches(p.x,mode),pDec)} ${primaryLabel()}</td>
+      <td>${fmt(fromInches(p.y,mode),pDec)} ${primaryLabel()}</td>
+      <td>${rShow.p} <small class="small">${rShow.s}</small></td>`;
+    tbl.appendChild(tr);
+  });
+}
+
+/* ===== Log (primary units only) ===== */
+const LOG_KEY="circleFitLog_v2";
+const nowStr=()=>{const d=new Date(),p=n=>String(n).padStart(2,"0");return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;}
+function loadLog(){try{return JSON.parse(localStorage.getItem(LOG_KEY)||"[]")}catch{return[]}}
+function saveLog(a){localStorage.setItem(LOG_KEY,JSON.stringify(a))}
+function addLog(pts,fit){
+  const e={t:nowStr(),n:pts.length,unit:mode,r:fromInches(fit.r,mode),xc:fromInches(fit.xc,mode),yc:fromInches(fit.yc,mode),rms:fromInches(fit.rms,mode)};
+  const a=loadLog(); a.unshift(e); saveLog(a); renderLog(a);
+}
+function renderLog(a=loadLog()){
+  const log=document.getElementById('log'); log.querySelectorAll('.rowd').forEach(n=>n.remove());
+  const d=+decEl.value||primaryDecimals();
+  for(const e of a){const row=document.createElement('div'); row.className="rowd";
+    const thr=e.unit===IN?0.001:0.001*MM_PER_IN; const cls=(e.rms>thr)?"bad":"ok";
+    row.innerHTML=`<div>${e.t}</div><div>${e.n}</div><div class="r">${e.r.toFixed(d)} ${e.unit}</div><div>(${e.xc.toFixed(d)}, ${e.yc.toFixed(d)}) ${e.unit}</div><div class="rms ${cls}">${e.rms.toFixed(d)} ${e.unit}</div>`;
+    log.appendChild(row);}
+}
+function exportLogCSV(){
+  const a=loadLog(); if(!a.length) return; const d=+decEl.value||primaryDecimals();
+  const csv=["Time,N,Unit,Radius,CenterX,CenterY,RMS",...a.map(e=>`${e.t},${e.n},${e.unit},${e.r.toFixed(d)},${e.xc.toFixed(d)},${e.yc.toFixed(d)},${e.rms.toFixed(d)}`)].join("\n");
+  const blob=new Blob([csv],{type:"text/csv"}); const link=document.createElement('a'); link.href=URL.createObjectURL(blob); link.download="circle_fit_log.csv"; link.click(); URL.revokeObjectURL(link.href);
+}
+
+/* ===== Actions ===== */
+function doFit(dropWorst){
+  const pts=parseToInches(); if(pts.length<3){render([],null); alert("Need at least 3 valid points."); return;}
+  let fit=fitCircle(pts);
+  if(dropWorst && pts.length>3){ let worst=0,mag=0; fit.residuals.forEach((v,i)=>{const a=Math.abs(v); if(a>mag){mag=a; worst=i;}}); const pts2=pts.slice(0,worst).concat(pts.slice(worst+1)); fit=fitCircle(pts2); }
+  render(pts,fit); addLog(pts,fit);
+}
+document.getElementById('btnFit').addEventListener('click',()=>doFit(false));
+document.getElementById('btnDrop').addEventListener('click',()=>doFit(true));
+document.getElementById('btnClear').addEventListener('click',()=>{ta.value=""; render([],null);});
+document.getElementById('btnCopy').addEventListener('click',()=>{
+  const pts=parseToInches(); if(pts.length<3) return; const fit=fitCircle(pts);
+  const dPrim=+decEl.value||primaryDecimals(), dSec=secondaryDecimals();
+  const toLine=(label,valInIn)=>`${label}\t${fmt(fromInches(valInIn,mode),dPrim)} ${primaryLabel()} (${fmt(fromInches(valInIn,mode===IN?MM:IN),dSec)} ${secondaryLabel()})`;
+  const lines=[toLine("Radius",fit.r),toLine("Diameter",2*fit.r),toLine("Xc",fit.xc),toLine("Yc",fit.yc),toLine("RMS",fit.rms),"","#\tX\tY\tResidual"];
+  fit.residuals.forEach((res,i)=>lines.push(`${i+1}\t${fmt(fromInches(pts[i].x,mode),dPrim)} ${primaryLabel()}\t${fmt(fromInches(pts[i].y,mode),dPrim)} ${primaryLabel()}\t${fmt(fromInches(res,mode),dPrim)} ${primaryLabel()} (${fmt(fromInches(res,mode===IN?MM:IN),dSec)} ${secondaryLabel()})`));
+  navigator.clipboard.writeText(lines.join("\n")).catch(()=>{});
+});
+document.getElementById('btnDownload').addEventListener('click',()=>{
+  const pts=parseToInches(); if(pts.length<3) return; const fit=fitCircle(pts);
+  const dPrim=+decEl.value||primaryDecimals(), dSec=secondaryDecimals();
+  const csv=[`Unit,${primaryLabel()}`,`Radius,${fmt(fromInches(fit.r,mode),dPrim)} (${fmt(fromInches(fit.r,mode===IN?MM:IN),dSec)} ${secondaryLabel()})`,
+             `Diameter,${fmt(fromInches(2*fit.r,mode),dPrim)} (${fmt(fromInches(2*fit.r,mode===IN?MM:IN),dSec)} ${secondaryLabel()})`,
+             `CenterX,${fmt(fromInches(fit.xc,mode),dPrim)} (${fmt(fromInches(fit.xc,mode===IN?MM:IN),dSec)} ${secondaryLabel()})`,
+             `CenterY,${fmt(fromInches(fit.yc,mode),dPrim)} (${fmt(fromInches(fit.yc,mode===IN?MM:IN),dSec)} ${secondaryLabel()})`,
+             `RMS,${fmt(fromInches(fit.rms,mode),dPrim)} (${fmt(fromInches(fit.rms,mode===IN?MM:IN),dSec)} ${secondaryLabel()})`,
+             "", "Index,X (primary),Y (primary),Residual (primary),Residual (secondary)"];
+  pts.forEach((p,i)=>{const res=fit.residuals[i]; csv.push([i+1,fmt(fromInches(p.x,mode),dPrim),fmt(fromInches(p.y,mode),dPrim),fmt(fromInches(res,mode),dPrim),fmt(fromInches(res,mode===IN?MM:IN),dSec)].join(","));});
+  const blob=new Blob([csv.join("\n")],{type:"text/csv"}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download="circle_fit_results.csv"; a.click(); URL.revokeObjectURL(a.href);
+});
+document.getElementById('btnLogCSV').addEventListener('click',exportLogCSV);
+document.getElementById('btnLogClear').addEventListener('click',()=>{ if(confirm("Clear the saved log?")){localStorage.removeItem(LOG_KEY); renderLog([]);} });
+
+/* === Slider interactions === */
+const switchEl=document.getElementById('switch'), lblIN=document.getElementById('lblIN'), lblMM=document.getElementById('lblMM');
+function setMode(newMode){
+  mode=newMode;
+  switchEl.classList.toggle('mm', mode===MM);
+  switchEl.classList.toggle('in', mode===IN);
+  lblIN.classList.toggle('active', mode===IN);
+  lblMM.classList.toggle('active', mode===MM);
+  setPrimaryDecimalsDefault(); updateUnitLabels();
+
+  // re-render current values without logging new row
+  const pts=parseToInches();
+  if(pts.length>=3){ const fit=fitCircle(pts); render(pts,fit); } else { render([],null); }
+  renderLog(); // logged rows keep their original units; only precision display follows the control
+}
+switchEl.addEventListener('click', ()=> setMode(mode===IN?MM:IN));
+switchEl.addEventListener('keydown', (e)=>{ if(e.key===" "||e.key==="Enter"){ e.preventDefault(); setMode(mode===IN?MM:IN);} });
+lblIN.addEventListener('click', ()=> setMode(IN));
+lblMM.addEventListener('click', ()=> setMode(MM));
+
+/* boot */
+setPrimaryDecimalsDefault(); updateUnitLabels(); render([],null); renderLog();
+</script>
+</body>
+</html>
